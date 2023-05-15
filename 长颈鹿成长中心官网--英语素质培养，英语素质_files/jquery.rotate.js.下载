@@ -1,0 +1,111 @@
+/**
+ * PC端旋转显示信息
+ * Tony <intval@163.com>
+ */
+;(function($, window, document, undefined) {
+
+    var Rotate = function(elem, options) {
+
+        this.opts = $.extend({}, {
+            idx: 2,
+            auto: false,
+            timer: 3000,
+            on: 'z-active',
+            item: '.u-item',
+            callback: false,
+            rotateY: 0,
+            translate: { Z: 120, X: 120 }
+        }, options);
+
+        this.$item = elem.find(this.opts.item);
+        this.idx = this.opts.idx;
+        this.auto = this.opts.auto;
+        this.on = this.opts.on;
+        this.callback = this.opts.callback;
+        this.rotateY = this.opts.rotateY;
+        this.translate = this.opts.translate;
+        this.int = null;
+        this.timer = this.opts.timer;
+    };
+
+    Rotate.prototype = {
+
+        _auto: function() {
+
+            if ( this.auto ) {
+                if (this.idx === this.$item.length - 1) {
+                    this.idx = 0;
+                } else {
+                    this.idx++;
+                }
+                this._reset(this.idx);
+            }
+        },
+
+        _reset: function( idx ) {
+
+            var leftNum, rightNum, len = this.$item.length, n = Math.floor(len / 2);
+            for (var i = 0; i < n; i++) {
+
+                leftNum = idx - i - 1;
+                this.$item.eq(leftNum).css({
+                    'z-index': (n * 3 - i),
+                    transform: 'translateX(' + ((-this.translate.X) * (i + 1)) + 'px) translateZ(' + (this.translate.Z - i * 100) + 'px) rotateY('+ this.rotateY +'deg)'
+                });
+
+                rightNum = idx + i + 1;
+                if (rightNum > len - 1) rightNum -= len;
+
+                this.$item.eq(rightNum).css({
+                    'z-index': (n * 3- i),
+                    transform: 'translateX(' + (this.translate.X * (i + 1)) + 'px) translateZ(' + (this.translate.Z - i * 100) + 'px) rotateY(-'+ this.rotateY +'deg)'
+                });
+            }
+
+            this.$item.removeClass(this.on).eq(idx).css({ 'z-index':  (len * 2), transform: 'translateZ(' + this.translate.Z * 2.5 + 'px)' }).addClass(this.on);
+        },
+
+        _init: function() {
+
+            var self = this;
+
+            self._reset(this.idx);
+
+            self.$item.on('click', function(ev) {
+
+                self._reset($(this).index())
+
+                if(self.callback !== false) self.callback($(this))
+
+                ev.preventDefault();
+                return !1
+
+            }).hover(function() {
+
+                clearInterval(self.int);
+                
+            }, function() {
+
+                self.int = setInterval(function() {
+
+                    self._auto();
+
+                }, self.timer);
+            });
+
+            self.int = setInterval(function() {
+
+                self._auto();
+
+            }, this.timer);
+        },
+
+        constructor: Rotate
+    };
+
+    $.fn.rotate = function(options) {
+        var carousel = new Rotate(this, options);
+        return carousel._init();
+    };
+
+})(jQuery, window, document, undefined);

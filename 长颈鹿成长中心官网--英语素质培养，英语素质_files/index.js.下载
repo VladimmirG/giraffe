@@ -1,0 +1,392 @@
+/**
+ * Tony <tony@giraffe.com.cn>
+ */
+$(function(){
+
+	/** 自适应Banner高度 */
+	var _winH = $(window).height()
+	$('#J_index_banner').height((_winH >= 614?_winH:614))
+
+	var Video = {
+		div: '#J_video',
+		item: '.J_video_item',
+		close: '#J_video_close',
+		tag: document.getElementById('J_video_tag')
+	};
+
+	$(Video.item).on('click', function(e){
+		Video.tag.src = 'https://d.giraffe.com.cn/www/video/'+ $(this).attr('data-char') +'.mp4'
+		Video.tag.play();
+		$(Video.div).show();
+		e.preventDefault()
+		return false
+	})
+
+	$(Video.close).on('click', function(){
+		Video.tag.src = ''
+		Video.tag.pause();
+		$(Video.div).hide()
+	})
+
+	// 旋转显示Video
+	$('#J_rotate_video').rotate();
+
+	/* .. [Banner Form] .. */
+	// 表单
+	var Form = {
+		token: Gtoken,
+		username: '#J_username',
+		phone: '#J_phone',
+		code: '#J_code',
+		city: '#J_city',
+		step: 0,
+		cityKeep: [],
+		schoolKeep: '',
+		schoolList: [],
+		submit: '#J_submit',
+		text: "提交信息",
+		hint: "#J_hint_msg",
+		lock: false,
+		dataProvince: [],
+		dataCity: {},
+		dataSchool: {},
+		maps: {},
+		area: {},
+		rand: {
+			btn: "#J_send_code",
+			txt: "发送验证码",
+			sec: "秒后重试",
+			n: 60,
+			lock: false
+		},
+		regExp: {
+			mobile: /^(1+(3|4|5|6|7|8|9)+\d{9})$/,
+			number: /^[0-9]*$/,
+			email: /^(\w)+(\.\w+)*@(\w)+((\.\w{2,4}){1,2})$/
+		},
+		matching: function(str, type) {
+			var reg = Form.regExp,
+				rule = reg[type];
+			if (typeof rule === "undefined") {
+				console.error("No regular expressions are defined.");
+				return !1;
+			} else {
+				return rule.test(str);
+			}
+		},
+		hintMsg: function(msg, _callback) {
+			$(Form.hint).html(msg).show();
+			window.setTimeout(function() {
+				$(Form.hint).html('').hide();
+			}, 1500);
+		},
+		createArea: function (_data) {
+
+			var _opt = '<b>请选择地区:</b>'
+			for (var i in _data) {
+				_opt += '<small data-id="'+ i +'">'+ _data[i]['name'] +'</small>'
+			}
+			$('#J_slt_area').find('dd').html(_opt)
+		},
+		createSchool: function (_data) {
+
+			var _opt = '<b>请选择校区:</b>'
+			for (var i in _data) {
+				_opt += '<small data-id="'+ _data[i]['id'] +'"><em>'+ _data[i]['name'] +'</em> '+ _data[i]['address'] +'</small>'
+			}
+			$('#J_slt_school').find('dd').html(_opt)
+		},
+		parseData: function(data){
+
+			var ret = {}, map = {};
+			for (var i in data) {
+				ret[data[i]['areaId']] = data[i]
+
+				// 组装筛选数据
+				if (map[data[i]['areaId']] == undefined) map[data[i]['areaId']] = []
+				map[data[i]['areaId']].push(data[i])
+			}
+			Form.maps = map
+		},
+		list2tree: function (data, pid, set, pid_field, id_field) {
+			pid_field = pid_field || 'pid';
+			id_field = id_field || 'id';
+			var run = function (data, pid) {
+				var list = {};
+				for (var i in data) {
+					var node = data[i];
+					if ( node[pid_field] == pid ) {
+						var _sub = {};
+						if(set) _sub = set(node);
+						var tmp = run(data, node[id_field]);
+						if(JSON.stringify(tmp) !== '{}') _sub.children = tmp;
+						list[node[id_field]] = _sub;
+					}
+				}
+				return list;
+			};
+			return run(data, pid);
+		},
+	}
+
+	// 选择地区 弹出
+	$('#J_slt_area').on('click', 'dt', function( e ) {
+
+		var _this = $(this)
+
+		Form.createArea(Form.area)
+
+		$('#J_slt_school').find('dd').hide()
+
+		Form.cityKeep = []
+
+		_this.next('dd').show()
+
+		// 阻止冒泡
+		e.preventDefault()
+		return !1
+	});
+
+	// 确定 地区
+	$('#J_slt_area').on('click', 'small', function( e ) {
+
+		var _this = $(this), _txt = _this.text(), _id = _this.attr('data-id')
+
+		Form.step++
+
+		// 根据省选择城市
+		if (Form.step == 1) {
+
+			Form.cityKeep.push(_txt)
+
+			// 创建 City 下拉项目
+			Form.createArea(Form.area[_id]['children'])
+		}
+
+		// 根据城市选择校区
+		if (Form.step == 2) {
+
+			Form.cityKeep.push(_txt)
+
+			_this.parent('dd').hide()
+
+			var city = Form.cityKeep.join(' ')
+			_this.parent('dd').prev('dt').text(city)
+
+			if ( city == '江苏省 南京市' ) {
+				$(Form.rand.btn).hide()
+				$(Form.code).hide()
+			} else {
+				$(Form.rand.btn).show()
+				$(Form.code).show()
+			}
+
+			Form.schoolList = Form.maps[_id] != undefined ? Form.maps[_id] : []
+			Form.createSchool(Form.schoolList)
+
+			$('#J_slt_school').find('dt').text('选择校区')
+			Form.schoolKeep = ''
+
+			Form.step = 0
+		}
+
+		// 阻止冒泡
+		e.preventDefault()
+		return !1
+	});
+
+	// 选择校区 弹出
+	$('#J_slt_school').on('click', 'dt', function( e ) {
+
+		if ( Form.schoolList.length <= 0) {
+			Form.hintMsg('请先选择地区');
+			return !1;
+		}
+
+		var _this = $(this)
+		_this.next('dd').show()
+
+		// 阻止冒泡
+		e.preventDefault()
+		return !1
+	});
+
+	// 确定校区
+	$('#J_slt_school').on('click', 'small', function( e ) {
+
+		var _this = $(this), _txt = _this.find('em').text()
+		_this.parent('dd').hide()
+		_this.parent('dd').prev('dt').text(_txt)
+		Form.schoolKeep = _txt
+
+		// 阻止冒泡
+		e.preventDefault()
+		return !1
+	});
+
+	// 点击页面其他部位，选择框不显示
+	$(document.body).on('click', function() {
+
+		var _area = $('#J_slt_area > dd')
+		if ( !_area.is(':hidden') ) _area.hide()
+
+		var _school = $('#J_slt_school > dd')
+		if ( !_school.is(':hidden') ) _school.hide()
+	})
+
+	/**
+	 * 获取列表：Ajax获取防止数据抓取
+	 */
+	$.ajax({
+		headers: { Authorization: Form.token }, url:'/ajax/school/list',
+		success: function (res) {
+			if(res.code == 0) {
+
+				Form.area = Form.list2tree(res.data.area, 0, function (node) {
+					return { name: node.name }
+				});
+
+				Form.parseData(res.data['school'])
+				Form.createArea(Form.area)
+			}
+		}
+	});
+
+	// 获取验证码
+	$(document.body).on('click', Form.rand.btn, function(){
+
+		if (Form.rand.lock) return !1;
+
+		var _this = $(this), _data = {};
+
+		var _val = $.trim($(Form.phone).val());
+		if(_val.length <= 0) {
+			Form.hintMsg('请输入手机号码');
+			return !1
+		} else  if (!Form.matching(_val, "mobile")) {
+			Form.hintMsg("手机号码格式不正确");
+			return !1;
+		} else {
+			_data.phone = _val;
+		}
+
+		var _n = Form.rand.n
+		Form.rand.lock = !Form.rand.lock;
+		_this.html(_n + Form.rand.sec)
+
+		$.ajax({
+			headers: { Authorization: Form.token },
+			type: 'POST', url: '/ajax/sms/send', data: _data,
+			success:function(res) {
+				if (res.code == 0) {
+					Form.hintMsg(res.data);
+				} else {
+					Form.hintMsg(res.msg);
+				}
+			}
+		});
+
+		var _int = window.setInterval( function() {
+			_n--;
+			_this.html(_n + Form.rand.sec);
+
+			if (_n < 0) {
+				Form.rand.lock = !Form.rand.lock;
+				_this.html(Form.rand.txt);
+				window.clearInterval(_int);
+			}
+		}, 1000);
+	})
+
+	// 提交表单
+	$(document.body).on('click', Form.submit, function(){
+
+		if (Form.lock) return !1;
+
+		var _data = {},  _this = $(this);
+
+		var _val = $.trim($(Form.username).val());
+		if (_val.length <= 0) {
+			Form.hintMsg('请填写孩子的姓名');
+			return !1;
+		} else {
+
+			// 获取来源(官网 OR 克隆站)
+			let _href = window.location.href, _source = '(E)'
+			if (_href.indexOf('e-giraffe') == -1) _source = ''
+
+			_data.name = _val + _source;
+		}
+
+		var _val = $.trim($(Form.phone).val());
+		if (_val.length <= 0) {
+			Form.hintMsg("请填写家长手机号码");
+			return !1;
+		} else if (!Form.matching(_val, 'mobile')) {
+			Form.hintMsg("手机号码格式不正确");
+			return !1;
+		} else {
+			_data.phone = _val;
+		}
+
+		if (Form.cityKeep.length <= 0) {
+			Form.hintMsg("请选择所在地区");
+			return !1;
+		} else {
+			_data.city = Form.cityKeep.join(' ')
+		}
+
+		if (Form.schoolKeep.length <= 0) {
+			Form.hintMsg("请选择校区");
+			return !1;
+		} else {
+			_data.content = Form.schoolKeep
+		}
+
+		// 验证码
+		var _val = $.trim($(Form.code).val());
+		_data.code = 0
+
+		// 特殊增加: 南京区域的校区无验证码
+		if (_data.city !== '江苏省 南京市') {
+
+			if (_val.length <= 0) {
+				Form.hintMsg("请输入短信验证码");
+				return !1;
+			} else {
+				if(!Form.matching(_val, 'number')) {
+					Form.hintMsg("验证码格式不正确");
+					return !1;
+				}
+				_data.code = _val;
+			}
+		}
+
+		Form.lock = !Form.lock;
+		_this.html('提交中...');
+
+		$.ajax({
+			headers: { Authorization: Form.token },
+			type: 'POST', url:'/ajax/message/add', data: _data,
+			success: function(res){
+				if (res.code == 0) {
+
+					$(Form.username).val('')
+					$(Form.phone).val('')
+					$(Form.code).val('')
+
+					Form.lock = !Form.lock;
+					_this.html('立即预约');
+					_data = {}
+
+					Form.hintMsg('<em>预约成功，我们将尽快与您联系！</em>');
+
+				} else {
+					Form.hintMsg(res.msg);
+					Form.lock = !Form.lock;
+					_this.html('立即预约');
+				}
+			}
+		})
+	});
+});
